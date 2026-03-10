@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -116,26 +115,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 
-		case "up", "w":
+		case "left", "a", "up", "w":
 			if m.cursor > 0 {
 				m.cursor--
 			} else {
 				m.cursor = len(m.choices) - 1
 			}
 
-			m.blink = true
-			m.blinkID++
+			m.selected = m.choices[m.cursor]
+			m.blink, m.blinkID = true, m.blinkID+1
 			return m, doBlink(m.blinkID)
 
-		case "down", "s":
+		case "right", "d", "down", "s":
 			if m.cursor < len(m.choices)-1 {
 				m.cursor++
 			} else {
 				m.cursor = 0
 			}
 
-			m.blink = true
-			m.blinkID++
+			m.selected = m.choices[m.cursor]
+			m.blink, m.blinkID = true, m.blinkID+1
 			return m, doBlink(m.blinkID)
 
 		case "enter", " ":
@@ -150,28 +149,22 @@ func (m model) View() string {
 	currentColor := m.fullGradient[m.colorIndex]
 	dynamicLogoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(currentColor))
 
-	var menuBuilder strings.Builder
-	menuBuilder.WriteString(titleStyle.Render("VAISHAK MENON") + "\n")
-	menuBuilder.WriteString("Software Engineer & Business Analyst\n\n")
-
+	var tabs []string
 	for i, choice := range m.choices {
-		cursor := "  "
-		if m.cursor == i {
-			if m.blink {
-				cursor = cursorStyle.Render("> ")
-			} else {
-				cursor = cursorStyle.Render("  ")
-			}
-			choice = selectedStyle.Render(choice)
+		tStyle := inactiveTabStyle
+		if i == m.cursor {
+			tStyle = activeTabStyle
 		}
-		fmt.Fprintf(&menuBuilder, "%s%s\n", cursor, choice)
+		tabs = append(tabs, tStyle.Padding(0, 2).Render(choice))
 	}
-	menuBuilder.WriteString("\n(Press 'q' to quit)\n")
+
+	headerRow := tabRowStyle.Render(lipgloss.JoinHorizontal(lipgloss.Top, tabs...))
+	contentTitle := titleStyle.Render(fmt.Sprintf("--- %s ---", m.selected))
 
 	var content string
 	switch m.selected {
 	case "About Me":
-		content = "Currently a participant in the New Wave program at\nSperidian. Passionate about Software Engineering, AI, Chess, and Dr.Pepper."
+		content = "Currently a participant in the New Wave program at Speridian. \nPassionate about Software Engineering, AI, Chess, and Dr.Pepper."
 	case "Projects":
 		content = "• Vantage: A custom Chess Engine built in Rust.\n• vaishakmenon.com: Personal site w/ RAG Chatbot.\n• Pomodoro Timer: Clean, minimal Pomodoro timer with music and ambient sounds."
 	case "Certifications":
@@ -180,8 +173,14 @@ func (m model) View() string {
 		content = "GitHub:   github.com/vaishakkmenon\nLinkedIn: linkedin.com/in/vaishakkmenon\nCurrent Location: Dillon, Montana"
 	}
 
-	rightPaneContent := lipgloss.JoinVertical(lipgloss.Left, menuBuilder.String(), "\n"+titleStyle.Render("--- "+m.selected+" ---")+"\n\n"+content)
-	leftPane := dynamicLogoStyle.Render(initialANSIShadowASCII)
-	rightPane := contentStyle.Render(rightPaneContent)
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
+	rightPane := lipgloss.JoinVertical(
+		lipgloss.Left,
+		headerRow,
+		"\n"+titleStyle.Render("VAISHAK MENON"),
+		"Software Engineer & Business Analyst",
+		"\n"+contentTitle,
+		"\n"+content,
+	)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, dynamicLogoStyle.Render(initialANSIShadowASCII), contentStyle.Render(rightPane))
 }
