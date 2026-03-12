@@ -17,7 +17,7 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
-          port: 2222          # TARGET: The host's new management port
+          port: 2022          # TARGET: The host's new management port
           request_pty: true   
           envs: TERM,COLORTERM
           script: |
