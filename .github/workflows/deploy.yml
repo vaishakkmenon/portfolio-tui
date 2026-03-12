@@ -18,19 +18,24 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           envs: TERM,COLORTERM
-          request_pty: true
+          request_pty: true 
           script: |
+            # 1. Navigate and Update
             cd ~/portfolio-tui
             git pull origin main
+
+            # 2. Build the new image
             docker build -t portfolio-tui .
-            
-            # Stop and remove the old instance
+
+            # 3. Aggressively clean up the old container
             docker stop portfolio-app || true
             docker rm -f portfolio-app || true
 
-            # Use -d to detach, and ensure no interactive flags are passed
+            # 4. Launch in detached mode (-d)
+            # We use --init to ensure the process handles signals correctly
             docker run -d \
               --name portfolio-app \
+              --init \
               -p 22:2222 \
               --restart unless-stopped \
               --read-only \
@@ -41,5 +46,8 @@ jobs:
               -v $(pwd)/.ssh:/home/vaishak/.ssh:ro \
               portfolio-tui
 
-            # Optional: A quick check to confirm the container is running
+            # 5. Verify and Exit
+            echo "Waiting for container to stabilize..."
+            sleep 2
             docker ps | grep portfolio-app
+            exit 0
