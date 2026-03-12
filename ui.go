@@ -171,7 +171,7 @@ func (m model) View() string {
 	renderer := lipgloss.NewRenderer(m.sess)
 	renderer.SetColorProfile(termenv.TrueColor)
 
-	const lockedHeight = 20
+	const lockedHeight = 18
 
 	// 2. Define all styles using this session-aware renderer
 	activeTab := renderer.NewStyle().
