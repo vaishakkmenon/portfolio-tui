@@ -17,25 +17,21 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
+          port: 2222          # TARGET: The host's new management port
+          request_pty: true   
           envs: TERM,COLORTERM
-          request_pty: true 
           script: |
-            # 1. Navigate and Update
             cd ~/portfolio-tui
             git pull origin main
-
-            # 2. Build the new image
             docker build -t portfolio-tui .
-
-            # 3. Aggressively clean up the old container
+            
             docker stop portfolio-app || true
             docker rm -f portfolio-app || true
 
-            # 4. Launch in detached mode (-d)
-            # We use --init to ensure the process handles signals correctly
+            # MAP: VPS Port 22 -> Container Port 2222
+            # This makes "ssh [IP]" (defaulting to 22) go to the TUI
             docker run -d \
               --name portfolio-app \
-              --init \
               -p 22:2222 \
               --restart unless-stopped \
               --read-only \
@@ -45,9 +41,3 @@ jobs:
               -e COLORTERM=$COLORTERM \
               -v $(pwd)/.ssh:/home/vaishak/.ssh:ro \
               portfolio-tui
-
-            # 5. Verify and Exit
-            echo "Waiting for container to stabilize..."
-            sleep 2
-            docker ps | grep portfolio-app
-            exit 0
