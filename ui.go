@@ -171,6 +171,8 @@ func (m model) View() string {
 	renderer := lipgloss.NewRenderer(m.sess)
 	renderer.SetColorProfile(termenv.TrueColor)
 
+	const lockedHeight = 20
+
 	// 2. Define all styles using this session-aware renderer
 	activeTab := renderer.NewStyle().
 		Foreground(m.currentTheme.Brand).
@@ -190,7 +192,7 @@ func (m model) View() string {
 	leftPaneBorder := renderer.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, false, false).
 		BorderForeground(lipgloss.Color("#333333")).
-		Height(16) // staticHeight
+		Height(lockedHeight)
 
 	brandColor := m.currentTheme.Brand
 	subtitleColor := m.currentTheme.Subtitle
@@ -239,7 +241,7 @@ func (m model) View() string {
 	nameStyle := renderer.NewStyle().Foreground(brandColor).Bold(true).SetString("VAISHAK MENON")
 	roleStyle := renderer.NewStyle().Foreground(subtitleColor).Faint(true).Italic(true)
 	sectionHeaderStyle := renderer.NewStyle().Foreground(brandColor).Bold(true)
-	contentBodyStyle := renderer.NewStyle().Foreground(lipgloss.Color("252")).Width(60)
+	contentBodyStyle := renderer.NewStyle().Foreground(lipgloss.Color("252")).Width(60).Height(12)
 	dividerStyle := renderer.NewStyle().Foreground(subtitleColor).Faint(true)
 
 	// Join them horizontally
@@ -263,11 +265,8 @@ func (m model) View() string {
 	chipView := m.chipGrid.Render(renderer, m.pathProgress, m.currentTheme.Base, m.currentTheme.Fades)
 	chipHeight := lipgloss.Height(chipView)
 
-	// Calculate vertical center
-	topPad := (staticHeight - chipHeight) / 2
-
-	// NUDGE OFFSET: Change this to +1 to move it up slightly,
-	// or set to 0 for perfect mathematical centering
+	// UPDATE: Use lockedHeight here instead of staticHeight
+	topPad := (lockedHeight - chipHeight) / 2
 	topPad += 1
 
 	if topPad < 0 {
@@ -338,7 +337,7 @@ func (m model) View() string {
 		return lipgloss.Place(m.terminalWidth, m.terminalHeight, lipgloss.Center, lipgloss.Center, modal)
 	}
 
-	return lipgloss.NewStyle().PaddingLeft(hPad).PaddingTop(vPad).Render(mainUI)
+	return renderer.NewStyle().PaddingLeft(hPad).PaddingTop(vPad).Render(mainUI)
 }
 
 func (m model) getContent() string {
