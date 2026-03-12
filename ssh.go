@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	host = "127.0.0.1"
+	host = ""
 	port = 2222
 )
 
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
-	m := initialModel()
+	m := initialModel(s)
 	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
 

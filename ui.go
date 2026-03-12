@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/ssh"
 )
 
 // --- Model Definition ---
@@ -21,6 +22,7 @@ type model struct {
 	currentTheme   Theme
 	terminalWidth  int
 	terminalHeight int
+	sess           ssh.Session
 }
 
 type pulseMsg struct{}
@@ -73,7 +75,7 @@ func doPulse() tea.Cmd {
 }
 
 // --- Bubble Tea Lifecycle ---
-func initialModel() model {
+func initialModel(s ssh.Session) model {
 	// Initialize all paths as idle (-1)
 	grid := BuildChip()
 	progress := make([]int, len(grid.Paths))
@@ -82,6 +84,7 @@ func initialModel() model {
 	}
 
 	return model{
+		sess:         s,
 		choices:      []string{"About Me", "Projects", "Certifications", "Contact"},
 		selected:     "About Me",
 		chipGrid:     grid,
@@ -155,6 +158,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	renderer := lipgloss.NewRenderer(m.sess)
+
+	// RE-DEFINE TABS USING THE RENDERER
+	activeTab := renderer.NewStyle().
+		Foreground(m.currentTheme.Brand).
+		Underline(true).
+		Bold(true)
+
+	inactiveTab := renderer.NewStyle().
+		Foreground(lipgloss.Color("#666666"))
+
 	brandColor := m.currentTheme.Brand
 	subtitleColor := m.currentTheme.Subtitle
 
@@ -165,11 +179,11 @@ func (m model) View() string {
 	// 2. Build the Tabs
 	var tabs []string
 	for i, choice := range m.choices {
-		tStyle := inactiveTabStyle
+		var tStyle lipgloss.Style
 		if i == m.cursor {
-			tStyle = activeTabStyle.Copy().Foreground(m.currentTheme.Brand)
+			tStyle = activeTab
 		} else {
-			tStyle = inactiveTabStyle.Copy().Foreground(lipgloss.Color("#666666"))
+			tStyle = inactiveTab
 		}
 
 		if i == 0 {
@@ -202,11 +216,11 @@ func (m model) View() string {
 	paddedHeader := lipgloss.NewStyle().MarginBottom(1).Render(fullHeader)
 
 	// 3. Build the Right Pane
-	nameStyle := lipgloss.NewStyle().Foreground(brandColor).Bold(true).SetString("VAISHAK MENON")
-	roleStyle := lipgloss.NewStyle().Foreground(subtitleColor).Faint(true).Italic(true)
-	sectionHeaderStyle := lipgloss.NewStyle().Foreground(brandColor).Bold(true)
-	contentBodyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Width(60)
-	dividerStyle := lipgloss.NewStyle().Foreground(subtitleColor).Faint(true)
+	nameStyle := renderer.NewStyle().Foreground(brandColor).Bold(true).SetString("VAISHAK MENON")
+	roleStyle := renderer.NewStyle().Foreground(subtitleColor).Faint(true).Italic(true)
+	sectionHeaderStyle := renderer.NewStyle().Foreground(brandColor).Bold(true)
+	contentBodyStyle := renderer.NewStyle().Foreground(lipgloss.Color("252")).Width(60)
+	dividerStyle := renderer.NewStyle().Foreground(subtitleColor).Faint(true)
 
 	// Join them horizontally
 	roleLine := lipgloss.JoinHorizontal(lipgloss.Top,
