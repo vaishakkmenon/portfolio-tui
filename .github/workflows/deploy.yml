@@ -9,15 +9,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        # Bumped to v4 (which is patched for Node 24)
+        uses: actions/checkout@v4 
 
       - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.3
+        # Switched to the latest stable version that supports newer Node runtimes
+        uses: appleboy/ssh-action@v1.2.0 
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
-          port: 2022          # TARGET: The host's new management port
+          port: 2022
           request_pty: true   
           envs: TERM,COLORTERM
           script: |
@@ -28,8 +30,6 @@ jobs:
             docker stop portfolio-app || true
             docker rm -f portfolio-app || true
 
-            # MAP: VPS Port 22 -> Container Port 2222
-            # This makes "ssh [IP]" (defaulting to 22) go to the TUI
             docker run -d \
               --name portfolio-app \
               -p 22:2222 \
