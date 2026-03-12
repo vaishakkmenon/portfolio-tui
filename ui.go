@@ -240,7 +240,7 @@ func (m model) View() string {
 	)
 
 	// 4. Render the Chip and calculate the fixed centering
-	chipView := m.chipGrid.Render(m.pathProgress, m.currentTheme.Base, m.currentTheme.Fades)
+	chipView := m.chipGrid.Render(renderer, m.pathProgress, m.currentTheme.Base, m.currentTheme.Fades)
 	chipHeight := lipgloss.Height(chipView)
 
 	// Calculate vertical center
@@ -271,7 +271,7 @@ func (m model) View() string {
 		// We remove the border from the leftPane so it doesn't look weird when stacked
 		mobileLeftPane := lipgloss.NewStyle().
 			PaddingBottom(1).
-			Render(m.chipGrid.Render(m.pathProgress, m.currentTheme.Base, m.currentTheme.Fades))
+			Render(m.chipGrid.Render(renderer, m.pathProgress, m.currentTheme.Base, m.currentTheme.Fades))
 
 		mainUI = lipgloss.JoinVertical(lipgloss.Left, mobileLeftPane, rightPane)
 	} else {

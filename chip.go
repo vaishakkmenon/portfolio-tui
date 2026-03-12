@@ -72,18 +72,9 @@ func (g *Grid) AddPath(id int, segments []Point) {
 
 // Update the signature to accept the indices instead of a single point
 // Render now takes an array tracking the progress of ALL paths
-func (g *Grid) Render(pathProgress []int, baseColor lipgloss.Color, fadeColors []lipgloss.Color) string {
+func (g *Grid) Render(renderer *lipgloss.Renderer, pathProgress []int, baseColor lipgloss.Color, fadeColors []lipgloss.Color) string {
 	var sb strings.Builder
-
 	trail := make(map[Point]lipgloss.Color)
-
-	// fadeColors := []lipgloss.Color{
-	// 	lipgloss.Color("#FF4500"), // Head (Blazing Orange-Red)
-	// 	lipgloss.Color("#FF7F50"), // Tail 1 (Coral)
-	// 	lipgloss.Color("#CD5C5C"), // Tail 2 (Indian Red)
-	// 	lipgloss.Color("#8B0000"), // Tail 3 (Dark Red)
-	// 	lipgloss.Color("#3E0000"), // Tail 4 (Deep Rust)
-	//}
 
 	// Loop through all paths (skip 0, which is the core)
 	for pathIdx := 1; pathIdx < len(g.Paths); pathIdx++ {
@@ -110,22 +101,20 @@ func (g *Grid) Render(pathProgress []int, baseColor lipgloss.Color, fadeColors [
 		for x := 0; x < COLS; x++ {
 			myPath := g.cells[y][x].pathID
 			if myPath == -1 {
-				// Draw the thinner "V" Monogram
 				var vChar string
-
 				if (y == 5 && x == 12) || (y == 6 && x == 13) {
-					vChar = "\\" // Left arm
+					vChar = "\\"
 				} else if (y == 5 && x == 16) || (y == 6 && x == 15) {
-					vChar = "/" // Right arm
+					vChar = "/"
 				} else if y == 7 && x == 14 {
-					vChar = "V" // Bottom point
+					vChar = "V"
 				}
 
 				if vChar != "" {
-					line.WriteString(lipgloss.NewStyle().Foreground(baseColor).Render(vChar))
+					vStyle := renderer.NewStyle().Foreground(baseColor)
+					line.WriteString(vStyle.Render(vChar))
 					continue
 				}
-
 				line.WriteRune(' ')
 				continue
 			}
@@ -177,7 +166,8 @@ func (g *Grid) Render(pathProgress []int, baseColor lipgloss.Color, fadeColors [
 				color = trailColor
 			}
 
-			line.WriteString(lipgloss.NewStyle().Foreground(color).Render(string(char)))
+			charStyle := renderer.NewStyle().Foreground(color)
+			line.WriteString(charStyle.Render(string(char)))
 		}
 		if hasContent {
 			sb.WriteString(strings.TrimRight(line.String(), " ") + "\n")
