@@ -174,8 +174,16 @@ func (m model) View() string {
 		if i == m.cursor {
 			style = activeTab
 		}
-		tabs = append(tabs, style.Padding(0, 1).Render(choice))
+
+		// If it's the first tab, remove the left padding to align with your name
+		if i == 0 {
+			tabs = append(tabs, style.Padding(0, 1, 0, 0).Render(choice))
+		} else {
+			// Give other tabs some breathing room on both sides
+			tabs = append(tabs, style.Padding(0, 1).Render(choice))
+		}
 	}
+
 	header := renderer.NewStyle().MarginBottom(1).Render(lipgloss.JoinHorizontal(lipgloss.Top, tabs...))
 
 	// 2. Right Pane (Fixed Content Box)
