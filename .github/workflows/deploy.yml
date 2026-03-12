@@ -20,20 +20,15 @@ jobs:
           envs: TERM,COLORTERM
           request_pty: true
           script: |
-            # 1. Navigate to the project directory
             cd ~/portfolio-tui
-
-            # 2. Pull the latest code
             git pull origin main
-
-            # 3. Rebuild the image
             docker build -t portfolio-tui .
-
-            # 4. Remove the old container
+            
+            # Stop and remove the old instance
+            docker stop portfolio-app || true
             docker rm -f portfolio-app || true
 
-            # 5. Launch the hardened, color-forced container
-            # Using $COLORTERM ensures it picks up the env passed from GitHub
+            # Use -d to detach, and ensure no interactive flags are passed
             docker run -d \
               --name portfolio-app \
               -p 22:2222 \
@@ -45,3 +40,6 @@ jobs:
               -e COLORTERM=$COLORTERM \
               -v $(pwd)/.ssh:/home/vaishak/.ssh:ro \
               portfolio-tui
+
+            # Optional: A quick check to confirm the container is running
+            docker ps | grep portfolio-app
