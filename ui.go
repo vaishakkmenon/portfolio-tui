@@ -12,13 +12,15 @@ import (
 // --- Model Definition ---
 
 type model struct {
-	choices      []string
-	cursor       int
-	selected     string
-	chipGrid     *Grid
-	pathProgress []int // NEW: Tracks the pointIdx for EVERY path independently
-	moveTicker   int
-	currentTheme Theme
+	choices        []string
+	cursor         int
+	selected       string
+	chipGrid       *Grid
+	pathProgress   []int // NEW: Tracks the pointIdx for EVERY path independently
+	moveTicker     int
+	currentTheme   Theme
+	terminalWidth  int
+	terminalHeight int
 }
 
 type pulseMsg struct{}
@@ -95,6 +97,10 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.terminalWidth = msg.Width
+		m.terminalHeight = msg.Height
+		return m, nil
 	case pulseMsg:
 		// 1. Handle the Cascading Grid Movement
 		m.moveTicker++
@@ -243,11 +249,35 @@ func (m model) View() string {
 		Height(staticHeight).
 		Render(chipView)
 
-	// 6. Combine and apply top margin
-	mainView := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, lipgloss.NewStyle().PaddingLeft(2).Render(rightPane))
+	var mainUI string
 
-	// Return the final stack
-	return lipgloss.NewStyle().MarginTop(1).Render(lipgloss.JoinVertical(lipgloss.Left, mainView))
+	// Check if the screen is too narrow for a side-by-side layout
+	if m.terminalWidth < 90 {
+		// MOBILE/VERTICAL MODE: Stack them!
+		// We remove the border from the leftPane so it doesn't look weird when stacked
+		mobileLeftPane := lipgloss.NewStyle().
+			PaddingBottom(1).
+			Render(m.chipGrid.Render(m.pathProgress, m.currentTheme.Base, m.currentTheme.Fades))
+
+		mainUI = lipgloss.JoinVertical(lipgloss.Left, mobileLeftPane, rightPane)
+	} else {
+		// DESKTOP MODE: Original side-by-side layout
+		mainUI = lipgloss.JoinHorizontal(lipgloss.Top, leftPane, lipgloss.NewStyle().PaddingLeft(2).Render(rightPane))
+	}
+
+	uiWidth := lipgloss.Width(mainUI)
+	uiHeight := lipgloss.Height(mainUI)
+
+	hPad := (m.terminalWidth - uiWidth) / 2
+	vPad := (m.terminalHeight - uiHeight) / 2
+	if hPad < 0 {
+		hPad = 0
+	}
+	if vPad < 0 {
+		vPad = 0
+	}
+
+	return lipgloss.NewStyle().PaddingLeft(hPad).PaddingTop(vPad).Render(mainUI)
 }
 
 func (m model) getContent() string {
