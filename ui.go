@@ -2,111 +2,125 @@ package main
 
 import (
 	"fmt"
-	"strconv"
+	"math/rand"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
+// --- Model Definition ---
+
 type model struct {
 	choices      []string
 	cursor       int
 	selected     string
-	blink        bool
-	blinkID      int
-	fullGradient []string
-	colorIndex   int
-	direction    int
-}
-
-type blinkMsg struct {
-	id int
+	chipGrid     *Grid
+	pathProgress []int // NEW: Tracks the pointIdx for EVERY path independently
+	moveTicker   int
+	currentTheme Theme
 }
 
 type pulseMsg struct{}
 
-func parseHex(s string) ([3]uint8, error) {
-	var res [3]uint8
-	v, _ := strconv.ParseInt(s[1:], 16, 32)
-	res[0] = uint8(v >> 16)
-	res[1] = uint8(v >> 8 & 0xFF)
-	res[2] = uint8(v & 0xFF)
-	return res, nil
+type Theme struct {
+	Brand    lipgloss.Color
+	Subtitle lipgloss.Color
+	Base     lipgloss.Color
+	Fades    []lipgloss.Color
 }
 
-func generateSmoothGradient(keyframes []string, stepsPerSegment int) []string {
-	var fullGradient []string
-
-	for i := 0; i < len(keyframes)-1; i++ {
-		start, _ := parseHex(keyframes[i])
-		end, _ := parseHex(keyframes[i+1])
-
-		for j := 0; j < stepsPerSegment; j++ {
-			ratio := float64(j) / float64(stepsPerSegment)
-			r := uint8(float64(start[0]) + ratio*float64(int(end[0])-int(start[0])))
-			g := uint8(float64(start[1]) + ratio*float64(int(end[1])-int(start[1])))
-			b := uint8(float64(start[2]) + ratio*float64(int(end[2])-int(start[2])))
-			fullGradient = append(fullGradient, fmt.Sprintf("#%02x%02x%02x", r, g, b))
-		}
-	}
-
-	return fullGradient
+var themes = map[string]Theme{
+	"FORGE": { // Formerly Vantage
+		Brand:    lipgloss.Color("#FF4500"),
+		Subtitle: lipgloss.Color("#CD5C5C"),
+		Base:     lipgloss.Color("#1C1C1C"),
+		Fades:    []lipgloss.Color{"#FF4500", "#FF7F50", "#CD5C5C", "#8B0000", "#3E0000"},
+	},
+	"NEON": { // Formerly Hydrodash
+		Brand:    lipgloss.Color("#00FFFF"),
+		Subtitle: lipgloss.Color("#00BFFF"),
+		Base:     lipgloss.Color("#0A2463"),
+		Fades:    []lipgloss.Color{"#00FFFF", "#00BFFF", "#1E90FF", "#0000CD", "#000080"},
+	},
+	"PULSE": { // Formerly Domain
+		Brand:    lipgloss.Color("#FF00FF"),
+		Subtitle: lipgloss.Color("#C71585"),
+		Base:     lipgloss.Color("#4A0000"),
+		Fades:    []lipgloss.Color{"#FF00FF", "#C71585", "#8B008B", "#4B0082", "#2F0000"},
+	},
+	"TERMINAL": { // Formerly Kube
+		Brand:    lipgloss.Color("#00FF41"),
+		Subtitle: lipgloss.Color("#008F11"),
+		Base:     lipgloss.Color("#0D1117"),
+		Fades:    []lipgloss.Color{"#00FF41", "#008F11", "#003B00", "#002500", "#001000"},
+	},
+	"DRIFT": { // Formerly Crosstrek
+		Brand:    lipgloss.Color("#BD93F9"),
+		Subtitle: lipgloss.Color("#6272A4"),
+		Base:     lipgloss.Color("#282A36"),
+		Fades:    []lipgloss.Color{"#BD93F9", "#FF79C6", "#8BE9FD", "#50FA7B", "#F1FA8C"},
+	},
 }
 
-func doBlink(id int) tea.Cmd {
-	return tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
-		return blinkMsg{id: id}
-	})
-}
-
+// --- Helper Functions ---
 func doPulse() tea.Cmd {
 	return tea.Tick(time.Millisecond*30, func(t time.Time) tea.Msg {
 		return pulseMsg{}
 	})
 }
 
+// --- Bubble Tea Lifecycle ---
 func initialModel() model {
-	keyframes := []string{
-		"#2A0080", "#4B0082", "#6A0DAD", "#8A2BE2",
-		"#9400D3", "#8A2BE2", "#6A0DAD", "#4B0082",
+	// Initialize all paths as idle (-1)
+	grid := BuildChip()
+	progress := make([]int, len(grid.Paths))
+	for i := range progress {
+		progress[i] = -1
 	}
-
-	smoothGradient := generateSmoothGradient(keyframes, 20)
 
 	return model{
 		choices:      []string{"About Me", "Projects", "Certifications", "Contact"},
 		selected:     "About Me",
-		blink:        true,
-		blinkID:      0,
-		fullGradient: smoothGradient,
-		colorIndex:   0,
-		direction:    1,
+		chipGrid:     grid,
+		pathProgress: progress,
+		moveTicker:   0,
+		currentTheme: themes["NEON"],
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(doBlink(m.blinkID), doPulse())
+	return doPulse()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
-	case blinkMsg:
-		if msg.id == m.blinkID {
-			m.blink = !m.blink
-			return m, doBlink(m.blinkID)
-		}
-		return m, nil
-
 	case pulseMsg:
-		m.colorIndex += m.direction
-		if m.colorIndex >= len(m.fullGradient)-1 {
-			m.colorIndex = len(m.fullGradient) - 1
-			m.direction = -1
-		} else if m.colorIndex <= 0 {
-			m.colorIndex = 0
-			m.direction = 1
+		// 1. Handle the Cascading Grid Movement
+		m.moveTicker++
+		if m.moveTicker >= 2 { // Speed of the data streams
+			m.moveTicker = 0
+
+			// Loop through every path (skip 0, which is the core)
+			for i := 1; i < len(m.pathProgress); i++ {
+				if m.pathProgress[i] >= 0 {
+					// If the path is active, move the light forward
+					m.pathProgress[i]++
+					pathLen := len(m.chipGrid.Paths[i])
+					trailLen := 5
+
+					// Once the entire tail drains into the core, set to idle
+					if m.pathProgress[i] >= pathLen+trailLen {
+						m.pathProgress[i] = -1
+					}
+				} else {
+					// If the path is idle, give it a random chance to fire
+					// A 2% chance per tick keeps the cascade looking natural and busy
+					if rand.Intn(100) < 2 {
+						m.pathProgress[i] = 0
+					}
+				}
+			}
 		}
 		return m, doPulse()
 
@@ -114,73 +128,138 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
-
 		case "left", "a", "up", "w":
-			if m.cursor > 0 {
-				m.cursor--
-			} else {
-				m.cursor = len(m.choices) - 1
-			}
-
-			m.selected = m.choices[m.cursor]
-			m.blink, m.blinkID = true, m.blinkID+1
-			return m, doBlink(m.blinkID)
-
+			m.cursor = (m.cursor - 1 + len(m.choices)) % len(m.choices)
 		case "right", "d", "down", "s":
-			if m.cursor < len(m.choices)-1 {
-				m.cursor++
-			} else {
-				m.cursor = 0
-			}
-
-			m.selected = m.choices[m.cursor]
-			m.blink, m.blinkID = true, m.blinkID+1
-			return m, doBlink(m.blinkID)
-
-		case "enter", " ":
-			m.selected = m.choices[m.cursor]
+			m.cursor = (m.cursor + 1) % len(m.choices)
+		case "1":
+			m.currentTheme = themes["FORGE"]
+		case "2":
+			m.currentTheme = themes["NEON"]
+		case "3":
+			m.currentTheme = themes["PULSE"]
+		case "4":
+			m.currentTheme = themes["TERMINAL"]
+		case "5":
+			m.currentTheme = themes["DRIFT"]
 		}
+		m.selected = m.choices[m.cursor]
 	}
 	return m, nil
 }
 
 func (m model) View() string {
+	brandColor := m.currentTheme.Brand
+	subtitleColor := m.currentTheme.Subtitle
 
-	currentColor := m.fullGradient[m.colorIndex]
-	dynamicLogoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(currentColor))
+	// 1. Set a STANDARDIZED height for the entire UI
+	// 18-20 rows is usually perfect for your current content
+	const staticHeight = 16
 
+	// 2. Build the Tabs
 	var tabs []string
 	for i, choice := range m.choices {
 		tStyle := inactiveTabStyle
 		if i == m.cursor {
-			tStyle = activeTabStyle
+			tStyle = activeTabStyle.Copy().Foreground(m.currentTheme.Brand)
+		} else {
+			tStyle = inactiveTabStyle.Copy().Foreground(lipgloss.Color("#666666"))
 		}
-		tabs = append(tabs, tStyle.Padding(0, 2).Render(choice))
+
+		if i == 0 {
+			tabs = append(tabs, tStyle.Padding(0, 1, 0, 0).Render(choice))
+		} else {
+			tabs = append(tabs, tStyle.Padding(0, 1).Render(choice))
+		}
 	}
 
-	headerRow := tabRowStyle.Render(lipgloss.JoinHorizontal(lipgloss.Top, tabs...))
-	contentTitle := titleStyle.Render(fmt.Sprintf("--- %s ---", m.selected))
+	headerRow := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
 
-	var content string
-	switch m.selected {
-	case "About Me":
-		content = "Currently a participant in the New Wave program at Speridian. \nPassionate about Software Engineering, AI, Chess, and Dr.Pepper."
-	case "Projects":
-		content = "• Vantage: A custom Chess Engine built in Rust.\n• vaishakmenon.com: Personal site w/ RAG Chatbot.\n• Pomodoro Timer: Clean, minimal Pomodoro timer with music and ambient sounds."
-	case "Certifications":
-		content = "• Certified Kubernetes Administrator (CKA)\n• AWS Certified AI Practitioner\n• AWS Certified Cloud Practitioner"
-	case "Contact":
-		content = "GitHub:   github.com/vaishakkmenon\nLinkedIn: linkedin.com/in/vaishakkmenon\nCurrent Location: Dillon, Montana"
+	var activeName string
+	for name, t := range themes {
+		if t.Brand == m.currentTheme.Brand {
+			activeName = name
+		}
 	}
 
-	rightPane := lipgloss.JoinVertical(
-		lipgloss.Left,
+	statusIndicator := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#444444")).
+		Faint(true).
+		Render(fmt.Sprintf(" [MODE: %s]", activeName))
+
+	fullHeader := lipgloss.JoinHorizontal(
+		lipgloss.Bottom,
 		headerRow,
-		"\n"+titleStyle.Render("VAISHAK MENON"),
-		"Software Engineer & Business Analyst",
-		"\n"+contentTitle,
-		"\n"+content,
+		lipgloss.NewStyle().PaddingLeft(10).Render(statusIndicator),
 	)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, dynamicLogoStyle.Render(initialANSIShadowASCII), contentStyle.Render(rightPane))
+	paddedHeader := lipgloss.NewStyle().MarginBottom(1).Render(fullHeader)
+
+	// 3. Build the Right Pane
+	nameStyle := lipgloss.NewStyle().Foreground(brandColor).Bold(true).SetString("VAISHAK MENON")
+	roleStyle := lipgloss.NewStyle().Foreground(subtitleColor).Faint(true).Italic(true)
+	sectionHeaderStyle := lipgloss.NewStyle().Foreground(brandColor).Bold(true)
+	contentBodyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Width(60)
+	dividerStyle := lipgloss.NewStyle().Foreground(subtitleColor).Faint(true)
+
+	// Join them horizontally
+	roleLine := lipgloss.JoinHorizontal(lipgloss.Top,
+		roleStyle.Render("Software Engineer"),
+		dividerStyle.Render(" | "),
+		roleStyle.Render("Business Analyst"),
+	)
+
+	// Use roleLine in your rightPane stack
+	rightPane := lipgloss.JoinVertical(
+		lipgloss.Left,
+		paddedHeader,
+		nameStyle.Render(),
+		roleLine, // Use the new horizontally joined line here
+		"\n"+sectionHeaderStyle.Render("── "+m.selected+" ──"),
+		"\n"+contentBodyStyle.Render(m.getContent()),
+	)
+
+	// 4. Render the Chip and calculate the fixed centering
+	chipView := m.chipGrid.Render(m.pathProgress, m.currentTheme.Base, m.currentTheme.Fades)
+	chipHeight := lipgloss.Height(chipView)
+
+	// Calculate vertical center
+	topPad := (staticHeight - chipHeight) / 2
+
+	// NUDGE OFFSET: Change this to +1 to move it up slightly,
+	// or set to 0 for perfect mathematical centering
+	topPad += 1
+
+	if topPad < 0 {
+		topPad = 0
+	}
+
+	// 5. Build the Left Pane
+	leftPane := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, true, false, false).
+		BorderForeground(lipgloss.Color("#333333")).
+		PaddingTop(topPad).
+		PaddingRight(2).
+		Height(staticHeight).
+		Render(chipView)
+
+	// 6. Combine and apply top margin
+	mainView := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, lipgloss.NewStyle().PaddingLeft(2).Render(rightPane))
+
+	// Return the final stack
+	return lipgloss.NewStyle().MarginTop(1).Render(lipgloss.JoinVertical(lipgloss.Left, mainView))
+}
+
+func (m model) getContent() string {
+	switch m.selected {
+	case "About Me":
+		return "📍 Based in Dillon, MT\n🏢 Business Analyst @ Speridian (New Wave Program)\n☁️  Cloud Native (CKA & AWS Cloud/AI Practitioner)\n\nPassionate about full-stack development, AI/ML, and system architecture. When I'm away from the keyboard, I'm usually analyzing chess positions, researching PC hardware, or meal prepping for the week."
+	case "Projects":
+		return "• vaishakmenon.com: Personal site.\n• RAG Chatbot: Chatbot about me, my experience, and what I am doing.\n• Vantage: Custom Chess Engine in Rust.\n• Pomodoro Timer: Productivity tool with emphasis with built in sounds/music."
+	case "Certifications":
+		return "• Certified Kubernetes Administrator (CKA)\n• AWS Certified AI Practitioner\n• AWS Certified Cloud Practitioner"
+	case "Contact":
+		return "Email: vaishakkmenon25@gmail.com\nGitHub: github.com/vaishakkmenon\nLinkedIn: linkedin.com/in/vaishakkmenon\nCurrently In: Dillon, Montana"
+	}
+	return ""
 }
