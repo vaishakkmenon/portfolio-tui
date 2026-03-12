@@ -32,5 +32,9 @@ COPY --from=builder /app/portfolio-tui .
 # Expose the SSH port we set in ssh.go
 EXPOSE 2222
 
+# Add this to your Dockerfile
+ENV TERM=xterm-256color
+ENV COLORTERM=truecolor
+
 # Run the application
 CMD ["./portfolio-tui"]

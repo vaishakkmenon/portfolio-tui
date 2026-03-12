@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/ssh"
+	"github.com/muesli/termenv"
 )
 
 // --- Model Definition ---
@@ -23,6 +24,7 @@ type model struct {
 	terminalWidth  int
 	terminalHeight int
 	sess           ssh.Session
+	showHelp       bool
 }
 
 type pulseMsg struct{}
@@ -85,12 +87,13 @@ func initialModel(s ssh.Session) model {
 
 	return model{
 		sess:         s,
-		choices:      []string{"About Me", "Projects", "Certifications", "Contact"},
+		choices:      []string{"About Me", "Projects", "Certifications", "Contact", "Help"},
 		selected:     "About Me",
 		chipGrid:     grid,
 		pathProgress: progress,
 		moveTicker:   0,
 		currentTheme: themes["NEON"],
+		showHelp:     true,
 	}
 }
 
@@ -134,6 +137,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, doPulse()
 
 	case tea.KeyMsg:
+		if m.showHelp {
+			m.showHelp = false
+			return m, nil
+		}
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -141,6 +148,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor = (m.cursor - 1 + len(m.choices)) % len(m.choices)
 		case "right", "d", "down", "s":
 			m.cursor = (m.cursor + 1) % len(m.choices)
+		case "?", "h":
+			m.showHelp = true
+			return m, nil
 		case "1":
 			m.currentTheme = themes["FORGE"]
 		case "2":
@@ -159,8 +169,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	renderer := lipgloss.NewRenderer(m.sess)
+	renderer.SetColorProfile(termenv.TrueColor)
 
-	// RE-DEFINE TABS USING THE RENDERER
+	// 2. Define all styles using this session-aware renderer
 	activeTab := renderer.NewStyle().
 		Foreground(m.currentTheme.Brand).
 		Underline(true).
@@ -168,6 +179,18 @@ func (m model) View() string {
 
 	inactiveTab := renderer.NewStyle().
 		Foreground(lipgloss.Color("#666666"))
+
+	// Use renderer for these status and container styles too!
+	statusStyle := renderer.NewStyle().
+		Foreground(lipgloss.Color("#444444")).
+		Faint(true)
+
+	paddedHeaderStyle := renderer.NewStyle().MarginBottom(1)
+
+	leftPaneBorder := renderer.NewStyle().
+		Border(lipgloss.NormalBorder(), false, true, false, false).
+		BorderForeground(lipgloss.Color("#333333")).
+		Height(16) // staticHeight
 
 	brandColor := m.currentTheme.Brand
 	subtitleColor := m.currentTheme.Subtitle
@@ -202,18 +225,15 @@ func (m model) View() string {
 		}
 	}
 
-	statusIndicator := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#444444")).
-		Faint(true).
-		Render(fmt.Sprintf(" [MODE: %s]", activeName))
+	statusIndicator := statusStyle.Render(fmt.Sprintf(" [MODE: %s]", activeName))
 
 	fullHeader := lipgloss.JoinHorizontal(
 		lipgloss.Bottom,
 		headerRow,
-		lipgloss.NewStyle().PaddingLeft(10).Render(statusIndicator),
+		renderer.NewStyle().PaddingLeft(10).Render(statusIndicator),
 	)
 
-	paddedHeader := lipgloss.NewStyle().MarginBottom(1).Render(fullHeader)
+	paddedHeader := paddedHeaderStyle.Render(fullHeader)
 
 	// 3. Build the Right Pane
 	nameStyle := renderer.NewStyle().Foreground(brandColor).Bold(true).SetString("VAISHAK MENON")
@@ -255,28 +275,29 @@ func (m model) View() string {
 	}
 
 	// 5. Build the Left Pane
-	leftPane := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), false, true, false, false).
-		BorderForeground(lipgloss.Color("#333333")).
+	leftPane := leftPaneBorder.
 		PaddingTop(topPad).
 		PaddingRight(2).
-		Height(staticHeight).
 		Render(chipView)
 
 	var mainUI string
 
 	// Check if the screen is too narrow for a side-by-side layout
 	if m.terminalWidth < 90 {
-		// MOBILE/VERTICAL MODE: Stack them!
-		// We remove the border from the leftPane so it doesn't look weird when stacked
-		mobileLeftPane := lipgloss.NewStyle().
+		// MOBILE/VERTICAL MODE: Use the renderer for the mobile style too
+		mobileLeftPane := renderer.NewStyle().
 			PaddingBottom(1).
 			Render(m.chipGrid.Render(renderer, m.pathProgress, m.currentTheme.Base, m.currentTheme.Fades))
 
 		mainUI = lipgloss.JoinVertical(lipgloss.Left, mobileLeftPane, rightPane)
 	} else {
-		// DESKTOP MODE: Original side-by-side layout
-		mainUI = lipgloss.JoinHorizontal(lipgloss.Top, leftPane, lipgloss.NewStyle().PaddingLeft(2).Render(rightPane))
+		// DESKTOP MODE: Standard side-by-side
+		// Note: Using renderer.NewStyle() for the rightPane padding too
+		mainUI = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			leftPane,
+			renderer.NewStyle().PaddingLeft(2).Render(rightPane),
+		)
 	}
 
 	uiWidth := lipgloss.Width(mainUI)
@@ -289,6 +310,32 @@ func (m model) View() string {
 	}
 	if vPad < 0 {
 		vPad = 0
+	}
+
+	if m.showHelp {
+		helpHeader := renderer.NewStyle().
+			Foreground(m.currentTheme.Brand).
+			Bold(true).
+			Render("HOW TO NAVIGATE")
+
+		helpContent := renderer.NewStyle().
+			Foreground(lipgloss.Color("252")).
+			Render(
+				"←/→ or A/D : Switch Tabs\n" +
+					"1 - 5       : Change Themes\n" +
+					"Q / Ctrl+C  : Exit Portfolio\n\n" +
+					"Press any key to start...",
+			)
+
+		modal := renderer.NewStyle().
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(m.currentTheme.Brand).
+			Padding(1, 2).
+			Width(40).
+			Render(lipgloss.JoinVertical(lipgloss.Center, helpHeader, "\n", helpContent))
+
+		// Center the modal over the existing UI
+		return lipgloss.Place(m.terminalWidth, m.terminalHeight, lipgloss.Center, lipgloss.Center, modal)
 	}
 
 	return lipgloss.NewStyle().PaddingLeft(hPad).PaddingTop(vPad).Render(mainUI)
@@ -304,6 +351,15 @@ func (m model) getContent() string {
 		return "• Certified Kubernetes Administrator (CKA)\n• AWS Certified AI Practitioner\n• AWS Certified Cloud Practitioner"
 	case "Contact":
 		return "Email: vaishakkmenon25@gmail.com\nGitHub: github.com/vaishakkmenon\nLinkedIn: linkedin.com/in/vaishakkmenon\nCurrently In: Dillon, Montana"
+	case "Help":
+		return "── NAVIGATION ──\n" +
+			"• ← / →  : Switch sections\n" +
+			"• A / D  : Switch sections\n\n" +
+			"── THEMES ──\n" +
+			"• 1 - 5  : Change color palette\n\n" +
+			"── SYSTEM ──\n" +
+			"• Q / ESC: Exit portfolio\n" +
+			"• Ctrl+C : Force quit"
 	}
 	return ""
 }
