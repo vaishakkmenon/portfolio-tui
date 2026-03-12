@@ -79,7 +79,7 @@ Host management is rerouted to Port `2022`, while public SSH traffic on Port `22
 
 I am a Software Engineer currently functioning as a Business Analyst within the Speridian Technologies "New Wave" program. My focus lies at the intersection of high-performance backend systems (Go/Rust) and Cloud Native infrastructure.
 
-- **Certifications:** Certified Kubernetes Administrator (CKA), AWS Certified AI Practitioner
+- **Certifications:** Certified Kubernetes Administrator (CKA), AWS Certified AI Practitioner, AWS Certified Cloud Practitioner
 - **Interests:** Chess engine development ([Vantage](https://github.com/vaishakkmenon)), Machine Learning, and PC hardware
 
 ---
