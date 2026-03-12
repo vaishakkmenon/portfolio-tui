@@ -17,20 +17,23 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
+          envs: TERM,COLORTERM
+          request_pty: true
           script: |
             # 1. Navigate to the project directory
             cd ~/portfolio-tui
 
-            # 2. Pull the latest code (using the credential store you set up)
+            # 2. Pull the latest code
             git pull origin main
 
-            # 3. Rebuild the image with the refactored ui.go
+            # 3. Rebuild the image
             docker build -t portfolio-tui .
 
             # 4. Remove the old container
             docker rm -f portfolio-app || true
 
             # 5. Launch the hardened, color-forced container
+            # Using $COLORTERM ensures it picks up the env passed from GitHub
             docker run -d \
               --name portfolio-app \
               -p 22:2222 \
@@ -39,6 +42,6 @@ jobs:
               --cap-drop=ALL \
               --security-opt no-new-privileges:true \
               -e TERM=xterm-256color \
-              -e COLORTERM=truecolor \
+              -e COLORTERM=$COLORTERM \
               -v $(pwd)/.ssh:/home/vaishak/.ssh:ro \
               portfolio-tui
