@@ -2,7 +2,7 @@ name: Deploy Portfolio TUI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   deploy:
@@ -21,10 +21,10 @@ jobs:
             # 1. Navigate to the project directory
             cd ~/portfolio-tui
 
-            # 2. Pull the latest code (Assuming you've git-initialized the folder)
+            # 2. Pull the latest code (using the credential store you set up)
             git pull origin main
 
-            # 3. Rebuild the image with the clean ui.go
+            # 3. Rebuild the image with the refactored ui.go
             docker build -t portfolio-tui .
 
             # 4. Remove the old container
