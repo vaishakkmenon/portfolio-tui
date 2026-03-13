@@ -9,11 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        # Bumped to v4 (which is patched for Node 24)
         uses: actions/checkout@v4 
 
       - name: Deploy to VPS via SSH
-        # Switched to the latest stable version that supports newer Node runtimes
         uses: appleboy/ssh-action@v1.2.0 
         with:
           host: ${{ secrets.HOST }}

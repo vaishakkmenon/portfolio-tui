@@ -34,7 +34,9 @@ func StartSSHServer() {
 
 	s, err := wish.NewServer(
 		wish.WithAddress(fmt.Sprintf("%s:%d", host, port)),
-		wish.WithHostKeyPath(".ssh/term_info_ed25519"), // It'll create this for you
+		wish.WithHostKeyPath(".ssh/term_info_ed25519"),
+		wish.WithMaxTimeout(5*time.Minute),
+		wish.WithIdleTimeout(2*time.Minute),
 		wish.WithMiddleware(
 			bubbletea.Middleware(teaHandler),
 			activeterm.Middleware(),
